@@ -1,0 +1,75 @@
+name: Create PR
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        required: true
+        type: string
+      prerelease:
+        default: "false"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      publish:
+        default: "false"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+      prerelease:
+        default: "false"
+        type: string
+      publish:
+        default: "false"
+        type: string
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v4
+
+      - name: Populate Environment Variables
+        id: populate-env-vars
+        run: |
+          echo 'BIOME_TAG="${{ inputs.tag }}"' > .env
+          echo 'PRERELEASE="${{ inputs.prerelease }}"' >> .env
+          echo 'PUBLISH="${{ inputs.publish }}"' >> .env
+
+      - name: Create Pull Request
+        id: create-pull-request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: build-${{ inputs.tag }}
+          title: "Build ${{ inputs.tag }}"
+          body: ""
+          labels: build-biome
+
+  cleanup:
+    if: ${{ always() }}
+    needs: [create-pr]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete Workflow Runs
+        id: delete-workflow-runs
+        timeout-minutes: 5
+        continue-on-error: true
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          retain_days: 0
+          delete_workflow_pattern: Create PR

@@ -1,0 +1,109 @@
+name: Release
+
+on:
+  issue_comment:
+    types: [created, edited]
+
+permissions:
+  actions: write
+  contents: write
+  issues: read
+  pull-requests: write
+  packages: write
+  id-token: write
+
+env:
+  NPM_CONFIG_PROVENANCE: true
+
+jobs:
+  release:
+    if: |
+      github.event.issue.pull_request &&
+      contains(github.event.issue.labels.*.name, 'build-biome') &&
+      github.event.comment.user.login == 'codesandbox-ci[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get Latest Commit
+        id: get-latest-commit
+        uses: xt0rted/pull-request-comment-branch@v2
+
+      - name: Get CodeSandbox CI Package URL
+        id: get-codesandbox-ci-package-url
+        run: echo "url=https://pkg.csb.dev/Sec-ant/biome-cli-codesandbox/commit/$(echo ${{ steps.get-latest-commit.outputs.head_sha }} | cut -c 1-8)/biome-cli-codesandbox" >> $GITHUB_OUTPUT
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: latest
+          registry-url: https://registry.npmjs.org
+
+      - name: Fetch CodeSandbox CI Package
+        id: fetch-codesandbox-ci-package
+        run: curl ${{ steps.get-codesandbox-ci-package-url.outputs.url }} | tar -xvzf - --one-top-level=codesandbox-ci-package --strip-components=1
+
+      - name: Get Package Meta
+        id: get-package-meta
+        working-directory: ./codesandbox-ci-package
+        run: |
+          echo "version=$(npm pkg get version | jq -r)" >> $GITHUB_OUTPUT
+          echo "prerelease=$(npm pkg get config.prerelease | jq -r)" >> $GITHUB_OUTPUT
+          echo "publish=$(npm pkg get config.publish | jq -r)" >> $GITHUB_OUTPUT
+
+      - name: Fetch NPM Package
+        id: fetch-npm-package
+        run: curl $(npm view @biomejs/cli-linux-x64@${{ steps.get-package-meta.outputs.version }} dist.tarball) | tar -xvzf - --one-top-level=npm-package --strip-components=1
+
+      - name: Patch Package
+        id: patch-package
+        working-directory: ./npm-package
+        run: |
+          cp -af ../codesandbox-ci-package/{biome,README.md} ./
+          npm pkg set name='biome-cli-codesandbox'
+          npm pkg set repository.url='git+https://github.com/Sec-ant/biome-cli-codesandbox.git'
+          npm pkg delete repository.directory
+          npm pkg set bugs='https://github.com/Sec-ant/biome-cli-codesandbox/issues'
+          npm pkg set author='Ze-Zheng Wu'
+          npm pkg fix
+
+      - name: Publish Package
+        id: publish-package
+        if: ${{ steps.get-package-meta.outputs.publish == 'true' }}
+        working-directory: ./npm-package
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Pack Package
+        id: pack-package
+        working-directory: ./npm-package
+        run: npm pack
+
+      - name: Release Package
+        id: release-package
+        uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: true
+          artifacts: "./npm-package/*.tgz"
+          artifactContentType: application/gzip
+          tag: "v${{ steps.get-package-meta.outputs.version }}"
+          prerelease: ${{ steps.get-package-meta.outputs.prerelease }}
+          removeArtifacts: true
+
+      - name: Close Pull Request
+        id: close-pull-request
+        run: gh pr close ${{ github.event.issue.number }} --comment "Auto-closing pull request." --delete-branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+
+  cleanup:
+    needs: [release]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete Workflow Runs
+        id: delete-workflow-runs
+        timeout-minutes: 5
+        continue-on-error: true
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          retain_days: 5
+          delete_workflow_pattern: Release

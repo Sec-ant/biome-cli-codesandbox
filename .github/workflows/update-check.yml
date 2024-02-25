@@ -1,0 +1,84 @@
+name: Update Check
+
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        default: "false"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      publish:
+        default: "false"
+        type: choice
+        options:
+          - "true"
+          - "false"
+  schedule:
+    - cron: "0 */1 * * *"
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-new-releases:
+    runs-on: ubuntu-latest
+    outputs:
+      new-releases: ${{ steps.get-new-releases.outputs.new-releases }}
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v4
+
+      - name: Cache Releases
+        id: cache-releases
+        if: inputs.force != 'true'
+        uses: actions/cache@v4
+        with:
+          path: releases.json
+          key: releases
+
+      - name: Initialize Releases
+        id: init-releases
+        if: inputs.force == 'true' || steps.cache-releases.outputs.cache-hit != 'true'
+        run: echo [] > releases.json
+
+      - name: Setup Node
+        id: setup-node
+        uses: actions/setup-node@v4
+        with:
+          node-version: latest
+
+      - name: Get New Releases
+        id: get-new-releases
+        run: echo "new-releases=$(node get-new-releases.js)" >> $GITHUB_OUTPUT
+
+  call-create-pr:
+    needs: check-new-releases
+    if: ${{ needs.check-new-releases.outputs.new-releases != '[]' && needs.check-new-releases.outputs.new-releases != '' }}
+    strategy:
+      max-parallel: 1
+      matrix:
+        releases: ${{ fromJson(needs.check-new-releases.outputs.new-releases) }}
+    uses: ./.github/workflows/create-pr.yml
+    with:
+      tag: ${{ matrix.releases.tag_name }}
+      prerelease: ${{ matrix.releases.prerelease }}
+      publish: ${{ (github.event_name == 'schedule' || inputs.publish == 'true') && 'true' || 'false' }}
+
+  cleanup:
+    if: ${{ always() }}
+    needs: [check-new-releases, call-create-pr]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete Workflow Runs
+        id: delete-workflow-runs
+        timeout-minutes: 5
+        continue-on-error: true
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          retain_days: 0
+          delete_workflow_pattern: Update Check

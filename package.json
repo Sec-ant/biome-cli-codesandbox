@@ -1,0 +1,11 @@
+{
+  "name": "biome-cli-codesandbox",
+  "version": "0.0.0",
+  "type": "module",
+  "files": [
+    "biome"
+  ],
+  "scripts": {
+    "build": "./build.sh"
+  }
+}
