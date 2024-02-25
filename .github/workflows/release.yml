@@ -68,7 +68,7 @@ jobs:
         id: publish-package
         if: ${{ steps.get-package-meta.outputs.publish == 'true' }}
         working-directory: ./npm-package
-        run: npm publish --access public
+        run: npm publish --access public --tag ${{ steps.get-package-meta.outputs.prerelease == 'true' && 'nightly' || 'latest' }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
