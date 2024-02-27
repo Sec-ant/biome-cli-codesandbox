@@ -33,17 +33,17 @@ jobs:
         id: checkout
         uses: actions/checkout@v4
 
-      - name: Cache Releases
-        id: cache-releases
+      - name: Restore Cache Releases
+        id: restore-cache-releases
         if: inputs.force != 'true'
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: releases.json
           key: releases
 
       - name: Initialize Releases
         id: init-releases
-        if: inputs.force == 'true' || steps.cache-releases.outputs.cache-hit != 'true'
+        if: inputs.force == 'true' || steps.restore-cache-releases.outputs.cache-hit != 'true'
         run: echo [] > releases.json
 
       - name: Setup Node
@@ -55,6 +55,14 @@ jobs:
       - name: Get New Releases
         id: get-new-releases
         run: echo "new-releases=$(node get-new-releases.js)" >> $GITHUB_OUTPUT
+
+      - name: Save Cache Releases
+        id: save-cache-releases
+        if: inputs.force != 'true' && steps.get-new-releases.outputs.new-releases != '[]' && steps.get-new-releases.outputs.new-releases != ''
+        uses: actions/cache/save@v4
+        with:
+          path: releases.json
+          key: releases
 
   call-create-pr:
     needs: check-new-releases
