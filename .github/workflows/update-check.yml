@@ -15,8 +15,8 @@ on:
         options:
           - "true"
           - "false"
-  # schedule:
-  #   - cron: "0 */1 * * *"
+  schedule:
+    - cron: "0 */1 * * *"
 
 permissions:
   actions: write
