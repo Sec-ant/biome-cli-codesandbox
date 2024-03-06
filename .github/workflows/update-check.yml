@@ -15,8 +15,8 @@ on:
         options:
           - "true"
           - "false"
-  schedule:
-    - cron: "0 */1 * * *"
+  # schedule:
+  #   - cron: "0 */1 * * *"
 
 permissions:
   actions: write
@@ -55,6 +55,11 @@ jobs:
       - name: Get New Releases
         id: get-new-releases
         run: echo "new-releases=$(node get-new-releases.js)" >> $GITHUB_OUTPUT
+
+      - name: Delete Cache Releases
+        id: delete-cache-releases
+        if: inputs.force != 'true' && steps.get-new-releases.outputs.new-releases != '[]' && steps.get-new-releases.outputs.new-releases != ''
+        run: gh cache delete releases
 
       - name: Save Cache Releases
         id: save-cache-releases
