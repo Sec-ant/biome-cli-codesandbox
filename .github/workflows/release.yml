@@ -25,7 +25,7 @@ jobs:
     steps:
       - name: Get Latest Commit
         id: get-latest-commit
-        uses: xt0rted/pull-request-comment-branch@node20
+        uses: xt0rted/pull-request-comment-branch@v2
 
       - name: Get CodeSandbox CI Package URL
         id: get-codesandbox-ci-package-url
